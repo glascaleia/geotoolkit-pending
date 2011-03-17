@@ -14,38 +14,55 @@
  *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *    Lesser General Public License for more details.
  */
-package org.geotoolkit.process.vector.clip;
+package org.geotoolkit.process.vector.douglasPeucker;
 
 import java.util.NoSuchElementException;
+import javax.measure.quantity.Length;
+import javax.measure.unit.Unit;
+
 import org.geotoolkit.data.DataStoreRuntimeException;
 import org.geotoolkit.data.FeatureCollection;
 import org.geotoolkit.data.FeatureIterator;
 import org.geotoolkit.factory.Hints;
 import org.geotoolkit.process.vector.VectorFeatureCollection;
-import org.geotoolkit.process.vector.clipgeometry.ClipGeometry;
 
 import org.opengis.feature.Feature;
 import org.opengis.feature.type.FeatureType;
+import org.opengis.geometry.MismatchedDimensionException;
+import org.opengis.referencing.operation.TransformException;
+import org.opengis.util.FactoryException;
 
 /**
- * FeatureCollection for Clip process
+ * FeatureCollection for Douglas Peucker simplification process
  * @author Quentin Boileau
  * @module pending
  */
-public class ClipFeatureCollection extends VectorFeatureCollection {
+public class DouglasPeuckerFeatureCollection extends VectorFeatureCollection {
 
     private final FeatureType newFeatureType;
+    private final double inputAccuracy;
+    private final Unit<Length> inputUnit;
+    private final Boolean inputBehavior;
+    private final Boolean inputLenient;
 
-    /**
-     * Connect to the original FeatureConnection
-     * @param originalFC FeatureCollection
-     */
-    public ClipFeatureCollection(FeatureCollection<Feature> originalFC) {
+  /**
+   * Connect to the original FeatureConnection
+   * @param originalFC
+   * @param inputAccuracy
+   * @param inputUnit
+   * @param inputBehavior
+   * @param inputLenient
+   */
+    public DouglasPeuckerFeatureCollection(FeatureCollection<Feature> originalFC, double inputAccuracy, Unit<Length> inputUnit, Boolean inputBehavior, Boolean inputLenient) {
         super(originalFC);
-
-        this.newFeatureType = ClipGeometry.changeFeatureType(super.getOriginalFeatureCollection().getFeatureType());
-
+        this.inputAccuracy = inputAccuracy;
+        this.inputUnit = inputUnit;
+        this.inputBehavior = inputBehavior;
+        this.inputLenient = inputLenient;
+        this.newFeatureType = super.getOriginalFeatureCollection().getFeatureType();
     }
+
+
 
     /**
      * Return the new FeatureType
@@ -65,15 +82,23 @@ public class ClipFeatureCollection extends VectorFeatureCollection {
      */
     @Override
     public FeatureIterator<Feature> iterator(Hints hints) throws DataStoreRuntimeException {
-        return new ClipFeatureIterator(getOriginalFeatureCollection().iterator());
+        return new ClipGeometryFeatureIterator(getOriginalFeatureCollection().iterator());
     }
 
     /**
      *  {@inheritDoc }
      */
     @Override
-    protected Feature modify(final Feature original) {
-        return Clip.clipFeature(original, newFeatureType);
+    public Feature modify(final Feature original) throws DataStoreRuntimeException {
+        try {
+            return DouglasPeucker.simplifyFeature(original,inputAccuracy,inputUnit,inputBehavior,inputLenient);
+        }catch (FactoryException ex) {
+            throw new DataStoreRuntimeException(ex);
+        } catch (MismatchedDimensionException ex) {
+           throw new DataStoreRuntimeException(ex);
+        } catch (TransformException ex) {
+           throw new DataStoreRuntimeException(ex);
+        }
     }
 
     /**
@@ -81,7 +106,7 @@ public class ClipFeatureCollection extends VectorFeatureCollection {
      * @author Quentin Boileau
      * @module pending
      */
-    private class ClipFeatureIterator implements FeatureIterator<Feature> {
+    private class ClipGeometryFeatureIterator implements FeatureIterator<Feature> {
 
         private final FeatureIterator<?> originalFI;
         private Feature nextFeature;
@@ -90,7 +115,7 @@ public class ClipFeatureCollection extends VectorFeatureCollection {
          * Connect to the original FeatureIterator
          * @param originalFI FeatureIterator
          */
-        public ClipFeatureIterator(final FeatureIterator<?> originalFI) {
+        public ClipGeometryFeatureIterator(final FeatureIterator<?> originalFI) {
             this.originalFI = originalFI;
             nextFeature = null;
         }
@@ -148,7 +173,6 @@ public class ClipFeatureCollection extends VectorFeatureCollection {
             while (nextFeature == null && originalFI.hasNext()) {
                 nextFeature = modify(originalFI.next());
             }
-
         }
     }
 }
